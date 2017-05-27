@@ -1,0 +1,657 @@
+import parsekit
+
+#[
+bindgen
+=======
+
+This tool reads in special `/** ... */` comments in a `.c` source to generate
+bindings. Those bindings consist of helper macros and information to tell the
+interpreter what your module is exporting.
+
+The format of the comments is documented in README_bindgen.md
+]#
+
+# This tool works by generating output in a series of passes.
+# The output is sent here.
+var gen_output: List[String] = []
+
+# This is the current package name
+var gen_pkg_name = ""
+
+# Helper functions that will come in handy later.
+
+define string_repeat(what: String, count: Integer): String
+{
+    var out = ""
+
+    for i in 0...count - 1: {
+        out = out ++ what
+    }
+
+    return out
+}
+
+define string_size(source: String): Integer {
+    return source.to_bytestring().size()
+}
+
+define field_to_list(source: Hash[String, parsekit.JsObject], field: String)
+    : List[parsekit.JsObject]
+{
+    try:
+        return source[field].as_list()
+    except KeyError:
+        return []
+
+    return []
+}
+
+define field_to_string(source: Hash[String, parsekit.JsObject], field: String)
+    : String
+{
+    try:
+        return source[field].as_string()
+    except KeyError:
+        return ""
+
+    return ""
+}
+
+define oct(num: Integer): String
+{
+    var out = ""
+
+    while num: {
+        var digit = num % 8
+        out = digit.to_s() ++ out
+        num = num / 8
+    }
+
+    return "0" ++ out
+}
+
+define run_each(
+    source: Hash[String, parsekit.JsObject],
+    field: String,
+    fn: Function(Hash[String, parsekit.JsObject]))
+{
+    var entries = field_to_list(source, field)
+
+    for i in 0...entries.size() - 1:
+        entries[i].as_hash() |> fn
+}
+
+define run_each_child(
+    source: Hash[String, parsekit.JsObject],
+    field: String,
+    fn: Function(Hash[String, parsekit.JsObject], Hash[String, parsekit.JsObject]))
+{
+    var entries = field_to_list(source, field)
+
+    for i in 0...entries.size() - 1:
+        fn(source, entries[i].as_hash())
+}
+
+define display_type(source: Hash[String, parsekit.JsObject])
+    : String
+{
+    var out = source["class"].as_string()
+    var args = field_to_list(source, "children")
+                .map(|m| m.as_hash() |> display_type )
+
+    if out == "Function": {
+        var func_out = args[0]
+        var inputs = args.slice(1, args.size()).join(", ")
+
+        if func_out != "Unit":
+            func_out = " => " ++ func_out 
+        else:
+            func_out = ""
+
+        out = out ++ "(" ++ inputs ++ func_out ++ ")"
+    elif source.has_key("is_optarg"):
+        out = "*" ++ out ++ " = " ++ source["value"].as_string()
+    elif args.size():
+        out = out ++ "[" ++ args.join(", ") ++ "]"
+    }
+
+    if source.has_key("is_vararg"):
+        out = out ++ "..."
+
+    return out
+}
+
+# The difference between this and the above is that the strings don't include
+# padding and that default values are not included.
+
+define display_noopt_type(source: Hash[String, parsekit.JsObject])
+    : String
+{
+    var out = source["class"].as_string()
+
+    var args = field_to_list(source, "children")
+            .map(|m| m.as_hash() |> display_noopt_type)
+
+    if out == "Function": {
+        var func_out = args[0]
+        var inputs = args.slice(1, args.size()).join(", ")
+
+        if func_out != "Unit":
+            func_out = "=>" ++ func_out
+        else:
+            func_out = ""
+
+        out = out ++ "(" ++ inputs ++ func_out ++ ")"
+    elif source.has_key("is_optarg"):
+        out = "*" ++ out
+    elif args.size():
+        out = out ++ "[" ++ args.join(",") ++ "]"
+    }
+
+    if source.has_key("is_vararg"):
+        out = out ++ "..."
+
+    return out
+}
+
+define clean_proto(input: Hash[String, parsekit.JsObject])
+    : String
+{
+    var out: List[String] = []
+    var args = field_to_list(input, "args")
+    var start = 0
+
+    for i in 0...args.size() - 1: {
+        var c = args[i].as_hash()["type"].as_hash()
+        out.push(display_noopt_type(c))
+    }
+
+    var out_text = out.join(",")
+    var return_type = display_noopt_type(
+        input["output"].as_hash())
+
+    if out_text != "":
+        out_text = "(" ++ out_text ++ ")"
+
+    if return_type != "Unit":
+        out_text = out_text ++ ":" ++ return_type
+
+    return out_text
+}
+
+#[
+Here are the different stages. These are organized as follows:
+
+* Passes start with `start_<passname>`
+
+* Helper functions are `on_<passname>_<groupname>`.
+
+* Each stage begins with a block explaining what it does.
+
+Three stages (offset, dyna, and loader) must walk the objects in the same order.
+If they aren't, dyna table indexes are unlikely to properly map over to loader
+indexes. Since this is C, that will cause the interpreter to crash.
+
+toplevel:
+    classes:
+        functions
+        properties
+
+    enums:
+        functions
+        variants
+
+    functions (toplevel)
+    vars (toplevel)
+]#
+
+#[
+Setup stage
+    Foreign classes:
+        Generate create wrapper struct and typedef
+        Generate ARG_ macro to fetch and cast an argument.
+        Generate INIT_ macro to create a new instance.
+
+    Non-builtin classes:
+        Generate ID_ macro to get runtime class id.
+]#
+
+var setup_index = 0
+
+define on_setup_classes(source: Hash[String, parsekit.JsObject])
+{
+    var cls_name = source["name"].as_string()
+    var full_name = $"lily_^(gen_pkg_name)_^(cls_name)"
+
+    var did_add = false
+    var layout_list = field_to_list(source, "fields")
+
+    if layout_list.size(): {
+        did_add = true
+        # The engine puts LILY_FOREIGN_HEADER at the top so this tool doesn't
+        # have to do it.
+        gen_output.push("typedef struct " ++ full_name ++ "_ {")
+
+        layout_list.each(|l| gen_output.push("    " ++ l.as_string()) )
+
+        gen_output.push("} " ++ full_name ++ ";")
+
+        gen_output.push(
+        ("#define ARG_{0}(state, index) \\\n" ++
+         "({1} *)lily_arg_generic(state, index)")
+        .format(cls_name, full_name))
+    }
+
+    if source.has_key("is_foreign") == true ||
+       source.has_key("is_native") == false: {
+
+        gen_output.push(
+        "#define ID_{0}(state) lily_cid_at(state, {1})"
+        .format(cls_name, setup_index))
+    }
+
+    if layout_list.size(): {
+        gen_output.push(
+        ("#define INIT_{0}(state)\\\n" ++
+         "({1} *) lily_new_foreign(state, " ++
+         "ID_{0}(state), " ++
+         "(lily_destroy_func)destroy_{0}, " ++
+         "sizeof({1}))")
+        .format(cls_name, full_name))
+    }
+
+    gen_output.push("")
+    setup_index += 1
+}
+
+define start_setup(root_obj: Hash[String, parsekit.JsObject])
+{
+    run_each(root_obj, "classes", on_setup_classes)
+}
+
+#[
+Dyna stage
+    This generates the dynaload table that the interpreter reads.
+
+    Classes and enums add themselves to dyna_class_names, which is later
+    written to the top of the table. The interpreter watches out for the usage
+    of those names, and builds a class id (cid) table accordingly. This data is
+    used at runtime by the ID_* macro to get the class id.
+]#
+
+var dyna_class_names: List[String] = []
+
+define on_dyna_vars(
+    parent: Hash[String, parsekit.JsObject],
+    obj: Hash[String, parsekit.JsObject])
+{
+    var dyna_letter = "R"
+
+    if obj.has_key("qualifier"): {
+        var qual = obj["qualifier"].as_string()
+
+        if qual == "public":
+            dyna_letter = "3"
+        elif qual == "protected":
+            dyna_letter = "2"
+        elif qual == "private":
+            dyna_letter = "1"
+    }
+
+    gen_output.push(
+    "    ,\"" ++ dyna_letter ++ "\\0"
+              ++ obj["name"].as_string() ++ "\\0"
+              ++ display_type(obj["type"].as_hash())
+              ++ "\"")
+}
+
+define on_dyna_functions(
+    parent: Hash[String, parsekit.JsObject],
+    obj: Hash[String, parsekit.JsObject])
+{
+    var dyna_letter = "F"
+    var generic_list = field_to_list(obj, "generics")
+
+    if parent.has_key("is_toplevel") == false:
+        dyna_letter = "m"
+
+    var generics = generic_list.map(|m| m.as_string()).join(",")
+    var proto = clean_proto(obj)
+
+    if generics:
+        generics = "[" ++ generics ++ "]"
+
+    gen_output.push(
+    "    ,\"" ++ dyna_letter ++ "\\0"
+                ++ obj["name"].as_string() ++ "\\0"
+                ++ generics
+                ++ proto
+                ++ "\"")
+}
+
+define on_dyna_variants(
+    parent: Hash[String, parsekit.JsObject],
+    obj: Hash[String, parsekit.JsObject])
+{
+    var dyna_letter = "V"
+    var type_str = ""
+
+    var types = field_to_list(obj, "args")
+                    .map(|m| m.as_hash()["type"].as_hash() |> display_type)
+
+    if types.size():
+        type_str = "(" ++ types.join(",") ++ ")"
+
+    gen_output.push(
+    "    ,\"" ++ dyna_letter
+              ++ "\\0"
+              ++ obj["name"].as_string()
+              ++ "\\0"
+              ++ type_str
+              ++ "\"")
+}
+
+define on_dyna_enums(class_obj: Hash[String, parsekit.JsObject])
+{
+    var dyna_letter = "E"
+    var total_size = field_to_list(class_obj, "functions").size()
+    var generics = field_to_list(class_obj, "generics")
+            .map(|m| m.as_string() )
+            .join(",")
+
+    if generics:
+        generics = "[" ++ generics ++ "]"
+
+    if class_obj.has_key("is_scoped"):
+        total_size += field_to_list(class_obj, "enums").size()
+
+    gen_output.push(
+    "    ,\"" ++ dyna_letter
+              ++ "\\"
+              ++ oct(total_size)
+              ++ class_obj["name"].as_string()
+              ++ "\\0"
+              ++ generics
+              ++ "\"")
+
+    dyna_class_names.push(class_obj["name"].as_string())
+
+    run_each_child(class_obj, "functions", on_dyna_functions)
+    run_each_child(class_obj, "variants", on_dyna_variants)
+}
+
+define on_dyna_classes(class_obj: Hash[String, parsekit.JsObject])
+{
+    var dyna_letter = "N"
+    var total_size =
+        field_to_list(class_obj, "functions").size() +
+        field_to_list(class_obj, "properties").size()
+
+    var parent = field_to_string(class_obj, "parent")
+
+    if class_obj.has_key("is_foreign"):
+        dyna_letter = "C"
+    elif parent:
+        parent = "\\0< " ++ parent
+    else:
+        parent = "\\0"
+
+    gen_output.push(
+    "    ,\"" ++ dyna_letter
+                ++ "\\"
+                ++ oct(total_size)
+                ++ class_obj["name"].as_string()
+                ++ parent
+                ++ "\"")
+
+    dyna_class_names.push(class_obj["name"].as_string())
+
+    run_each_child(class_obj, "functions", on_dyna_functions)
+    run_each_child(class_obj, "properties", on_dyna_vars)
+}
+
+define start_dyna(root_obj: Hash[String, parsekit.JsObject])
+{
+    gen_output.push("const char *lily_" ++ gen_pkg_name ++ "_table[] = {")
+    gen_output.push("")
+    var patch_index = gen_output.size()
+
+    run_each(root_obj, "classes", on_dyna_classes)
+    run_each(root_obj, "enums", on_dyna_enums)
+    run_each_child(root_obj, "functions", on_dyna_functions)
+    run_each_child(root_obj, "vars", on_dyna_vars)
+
+    gen_output.push("    ,\"Z\"")
+    gen_output.push("};")
+
+    if gen_pkg_name == "builtin":
+        dyna_class_names = []
+
+    var dyna_names = dyna_class_names.join("\\0")
+    var dyna_size = dyna_class_names.size() |> oct
+
+    gen_output[patch_index-1] = $"    \"\\^(dyna_size)^(dyna_names)\\0\""
+}
+
+#[
+Proto stage
+    The loader is a large switchboard that returns various function pointers
+    when asked (sometimes loading a var instead).
+
+    The code that comes later will need the macros defined here, and it would
+    also be nice if all code was kept to a single section.
+
+    This stage generates forward declarations according to what the loader will
+    later expect.
+]#
+
+define on_proto_vars(
+    parent: Hash[String, parsekit.JsObject],
+    obj: Hash[String, parsekit.JsObject])
+{
+    var name = obj["name"].as_string()
+    gen_output.push("void lily_{0}_var_{1}(lily_state *);"
+        .format(gen_pkg_name, name))
+}
+
+define on_proto_functions(
+    parent: Hash[String, parsekit.JsObject],
+    obj: Hash[String, parsekit.JsObject])
+{
+    var name = obj["name"].as_string()
+    var class_name = ""
+
+    if parent.has_key("name"):
+        class_name = parent["name"].as_string()
+
+    if obj.has_key("is_ctor"):
+        name = "new"
+
+    gen_output.push("void lily_{0}_{1}_{2}(lily_state *);"
+        .format(gen_pkg_name, class_name, name))
+}
+
+define start_proto(root_obj: Hash[String, parsekit.JsObject])
+{
+    run_each(root_obj, "classes", (|obj|
+        run_each_child(obj, "functions", on_proto_functions ) )
+    )
+
+    run_each(root_obj, "enums", (|obj|
+        run_each_child(obj, "functions", on_proto_functions ) )
+    )
+
+    run_each_child(root_obj, "functions", on_proto_functions)
+    run_each_child(root_obj, "vars", on_proto_vars)
+}
+
+#[
+Offset stage
+    For any enum/class, this generates a corresponding <name>_OFFSET #define.
+    It also generates one for toplevel functions/vars.
+
+    When the loader references different functions, it'll load methods like so:
+
+    ```
+        x_OFFSET + 1: return lily_pkg_x_func1;
+        x_OFFSET + 2: return lily_pkg_x_func2;
+    ```
+
+    The purpose of these offsets is to reduce diff size:
+
+    With this, adding a new function will bump the ids of classes that come
+    after it, and can change the distance for fellow methods.
+
+    Without this, adding a new function bumps the ids of every function that
+    comes after it.
+]#
+
+var offset_index = 1
+var offset_pairs: Hash[String, Integer] = []
+
+define on_offset_class_or_enum(class_obj: Hash[String, parsekit.JsObject])
+{
+    var name = class_obj["name"].as_string()
+
+    gen_output.push("#define " ++ name ++ "_OFFSET " ++ offset_index)
+    offset_pairs[name] = offset_index
+
+    offset_index +=
+        field_to_list(class_obj, "variants").size() +
+        field_to_list(class_obj, "properties").size() +
+        field_to_list(class_obj, "functions").size() +
+        1
+}
+
+define start_offsets(root_obj: Hash[String, parsekit.JsObject])
+{
+    run_each(root_obj, "classes", on_offset_class_or_enum)
+    run_each(root_obj, "enums", on_offset_class_or_enum)
+
+    if root_obj.has_key("functions") ||
+       root_obj.has_key("vars"): {
+        gen_output.push("#define toplevel_OFFSET " ++ offset_index)
+        offset_pairs["toplevel"] = offset_index
+    }
+}
+
+#[
+Loader stage
+    The loader is responsible for delivering raw pointers back to the
+    interpreter based on an index from the dyna table. For definitions, the
+    pointer is returned, whereas vars call a function to push a value and
+    return NULL.
+]#
+
+var loader_index = 1
+
+define on_loader_vars(
+    parent: Hash[String, parsekit.JsObject],
+    obj: Hash[String, parsekit.JsObject])
+{
+    var name = obj["name"].as_string()
+    var distance = loader_index - offset_pairs["toplevel"]
+    var load_name = "lily_{0}_var_{1}".format(gen_pkg_name, name)
+    var case_str = "toplevel_OFFSET + " ++ distance
+
+    gen_output.push(
+        "        case " ++ case_str ++ ": " ++ load_name
+                        ++ "(s); return NULL;")
+    loader_index += 1
+}
+
+define on_loader_functions(
+    parent: Hash[String, parsekit.JsObject],
+    obj: Hash[String, parsekit.JsObject])
+{
+    var name = obj["name"].as_string()
+    var parent_name = "toplevel"
+    var class_name = ""
+
+    if parent.has_key("name"): {
+        parent_name = parent["name"].as_string()
+        class_name = parent_name
+    }
+
+    if obj.has_key("is_ctor"):
+        name = "new"
+
+    var distance = (loader_index - offset_pairs[parent_name])
+    var case_str = parent_name ++ "_OFFSET + " ++ distance
+    var load_name = "lily_{0}_{1}_{2}"
+        .format(gen_pkg_name, class_name, name)
+
+    gen_output.push(
+        "        case " ++ case_str ++ ": return " ++ load_name ++ ";")
+    loader_index += 1
+}
+
+define start_loader(root_obj: Hash[String, parsekit.JsObject])
+{
+    gen_output.push(
+        "void *lily_" ++ gen_pkg_name ++ "_loader(lily_state *s, int id)\n{")
+    gen_output.push(
+        "    switch (id) {")
+
+    run_each(root_obj, "classes", (|obj|
+        loader_index += 1
+        run_each_child(obj, "functions", on_loader_functions )
+        loader_index +=
+            field_to_list(obj, "properties").size()
+        )
+    )
+
+    run_each(root_obj, "enums", (|obj|
+        loader_index += 1
+        run_each_child(obj, "functions", on_loader_functions )
+        loader_index +=
+            field_to_list(obj, "variants").size()
+        )
+    )
+
+    run_each_child(root_obj, "functions", on_loader_functions)
+    run_each_child(root_obj, "vars", on_loader_vars)
+
+    gen_output.push("        default: return NULL;")
+    gen_output.push("    }")
+    gen_output.push("}")
+}
+
+import sys
+
+var file_name = sys.argv[1]
+print("bindgen: Processing " ++ file_name ++ ".")
+
+var p = parsekit.CSourceDriver(parsekit.EngineCore())
+p.require_header_footer()
+p.load_file(file_name)
+
+match p.read_until_done_or_error(): {
+    case Failure(error):
+        print($"bindgen: Processing error: ^(error[0])\n    from line ^(error[1]).")
+    case Success(root_obj):
+        var starts =
+            [start_setup,
+             start_dyna,
+             start_offsets,
+             start_proto,
+             start_loader]
+
+        var root_hash = root_obj.as_hash()
+
+        gen_pkg_name = root_hash["package_name"].as_string()
+
+        if gen_pkg_name == "builtin":
+            starts.shift()
+
+        for i in 0...starts.size() - 1:
+            starts[i](root_hash)
+
+        var f = File.open(file_name, "w")
+
+        p.get_header().each(|e| f.print(e) )
+        gen_output.each(|e|     f.print(e) )
+        p.get_footer().each(|e| f.print(e) )
+
+        f.close()
+}
