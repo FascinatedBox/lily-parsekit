@@ -462,7 +462,8 @@ class EngineCore {
     private var @self_obj = @unit_type_obj
 
     var @root_obj = [
-        "is_toplevel" => true |> JsBoolean
+        "is_toplevel" => true |> JsBoolean,
+        "doc" => "" |> JsString
     ] |> JsHash
 
     private var @current_obj = @root_obj
@@ -522,7 +523,10 @@ class EngineCore {
     }
 
     define new_scope(name: String, field_name: String): JsObject {
-        var h = ["name" => name |> JsString] |> JsHash
+        var h = [
+            "name" => name |> JsString,
+            "doc" => @pending_doc |> JsString
+        ] |> JsHash
 
         push_field_elem(field_name, h)
 
@@ -783,8 +787,11 @@ class EngineCore {
             else:
                 source["output"] = @unit_type_obj
             }
+
+            source["doc"] = @pending_doc |> JsString
         else:
             source["output"] = @self_obj
+            source["doc"] = "" |> JsString
         }
 
         push_field_elem("functions", source |> JsHash)
@@ -1233,7 +1240,8 @@ class CSourceDriver(engine: EngineCore) {
         var name = @scanner.require(Token.Word)
 
         var raw_var =
-        ["name" => name |> JsString]
+        ["name" => name |> JsString,
+         "doc" => @engine.pending_doc |> JsString]
 
         @scanner.require(Token.Colon)
         @scanner.require(Token.Word)

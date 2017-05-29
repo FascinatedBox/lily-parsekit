@@ -75,7 +75,7 @@ Global vars will never have a qualifier set, as they're always global.
         } ...
     ]
 
-    "doc": "<docstring>" or absent
+    "doc": "<docstring>"
 
     "generics": [
         "<generic name>"...
@@ -112,7 +112,7 @@ global, or the function is a class method that is public.
 {
     "name": "<name>"
 
-    "doc": "<docstring>" or absent
+    "doc": "<docstring>"
 
     "fields": [
         "LILY_FOREIGN_HEADER",
@@ -174,7 +174,7 @@ yet allow variant arguments to have names.
 {
     "name": "<name>"
 
-    "doc": "<docstring>" or absent
+    "doc": "<docstring>"
     "is_scoped": true or absent
 
     "functions": [
@@ -207,7 +207,7 @@ least two variants to select between).
         class directive...
     ]
 
-    "doc": "<docstring>" or absent
+    "doc": "<docstring>"
 
     "enums": [
         enum directive...
