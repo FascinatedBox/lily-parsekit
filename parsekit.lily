@@ -1076,7 +1076,7 @@ class CSourceDriver(engine: EngineCore) {
             @is_builtin = true
 
         var root = @engine.root_obj.as_hash()
-        root["package_name"] = name |> JsString
+        root["name"] = name |> JsString
         root["doc"] = @engine.pending_doc |> JsString
         @scanner.next()
     }

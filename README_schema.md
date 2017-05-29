@@ -201,7 +201,7 @@ least two variants to select between).
 
 ```
 {
-    "package_name": "<name>"
+    "name": "<name>"
 
     "classes": [
         class directive...
@@ -225,5 +225,4 @@ least two variants to select between).
 }
 ```
 
-This is the root of the tree, returned once parsing is done. Note that it has
-`"package_name"` instead of `"name"`.
+This is the root of the tree, returned once parsing is done.

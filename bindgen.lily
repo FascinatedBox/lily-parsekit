@@ -461,7 +461,7 @@ define on_proto_functions(
     var name = obj["name"].as_string()
     var class_name = ""
 
-    if parent.has_key("name"):
+    if parent.has_key("is_toplevel") == false:
         class_name = parent["name"].as_string()
 
     if obj.has_key("is_ctor"):
@@ -568,7 +568,7 @@ define on_loader_functions(
     var parent_name = "toplevel"
     var class_name = ""
 
-    if parent.has_key("name"): {
+    if parent.has_key("is_toplevel") == false: {
         parent_name = parent["name"].as_string()
         class_name = parent_name
     }
@@ -639,7 +639,7 @@ match p.read_until_done_or_error(): {
 
         var root_hash = root_obj.as_hash()
 
-        gen_pkg_name = root_hash["package_name"].as_string()
+        gen_pkg_name = root_hash["name"].as_string()
 
         if gen_pkg_name == "builtin":
             starts.shift()
