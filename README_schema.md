@@ -36,10 +36,10 @@ below.
 ```
 {
     "class": "<name>",
-    "children": [ type member... ] or absent
-    "value": "<default value>" or absent
-    "is_optarg": true or absent
-    "is_vararg": true or absent
+    "children": [ type member... ] | absent
+    "value": "<default value>" | absent
+    "is_optarg": true | absent
+    "is_vararg": true | absent
 }
 ```
 
@@ -81,8 +81,8 @@ Global vars will never have a qualifier set, as they're always global.
         "<generic name>"...
     ] non-empty if present
 
-    "is_ctor": true or absent
-    "is_static": true or absent
+    "is_ctor": true | absent
+    "is_static": true | absent
     "output": type directive
     "qualifier": "protected" | "private" | "public" | absent
 }
@@ -103,8 +103,8 @@ If the function is a class constructor, then the return type is the type that
 The output field is never absent. If the function declaration didn't specify a
 return value, then a type directive with class `"Unit"` and no children is used.
 
-As with the var directive, the `qualifier` field is absent if the function is
-global, or the function is a class method that is public.
+Similar to the var directive, `qualifer` is only absent of the function provided
+is global.
 
 ## Class
 
@@ -117,22 +117,22 @@ global, or the function is a class method that is public.
     "fields": [
         "LILY_FOREIGN_HEADER",
         "<layout member>"...
-    ] or absent
+    ] | absent
 
     "functions": [
         function directive...
-    ] or absent
+    ] | absent
 
     "generics": [
         "<generic name>"
     ] non-empty if present
 
-    "kind": "builtin" or "class" or "native"
-    "parent": "<parent name>" or absent
+    "kind": "builtin" | "class" | "native"
+    "parent": "<parent name>" | absent
 
     "properties": [
         var directive...
-    ] or absent
+    ] | absent
 }
 ```
 
@@ -160,7 +160,7 @@ There are three general kinds of classes that are represented here:
             "name": ""
             "type": type directive
         }...
-    ] or absent
+    ] | absent
 }
 ```
 
@@ -174,7 +174,7 @@ yet allow variant arguments to have names.
     "name": "<name>"
 
     "doc": "<docstring>"
-    "is_scoped": true or absent
+    "is_scoped": true | false
 
     "functions": [
         function directive...
@@ -213,13 +213,13 @@ least two variants to select between).
 
     "functions": [
         function directive...
-    ] or absent
+    ] | absent
 
     "kind": "module"
 
     "vars": [
         var directive...
-    ]
+    ] | absent
 }
 ```
 
