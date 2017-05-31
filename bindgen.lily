@@ -218,8 +218,13 @@ Setup stage
 
 var setup_index = 0
 
-define on_setup_classes(source: Hash[String, parsekit.JsObject])
+define on_setup_containers(source: Hash[String, parsekit.JsObject])
 {
+    var kind = source["kind"].as_string()
+
+    if kind == "enum":
+        return
+
     var cls_name = source["name"].as_string()
     var full_name = $"lily_^(gen_pkg_name)_^(cls_name)"
 
@@ -242,13 +247,9 @@ define on_setup_classes(source: Hash[String, parsekit.JsObject])
         .format(cls_name, full_name))
     }
 
-    if source.has_key("is_foreign") == true ||
-       source.has_key("is_native") == false: {
-
-        gen_output.push(
-        "#define ID_{0}(state) lily_cid_at(state, {1})"
-        .format(cls_name, setup_index))
-    }
+    gen_output.push(
+    "#define ID_{0}(state) lily_cid_at(state, {1})"
+    .format(cls_name, setup_index))
 
     if layout_list.size(): {
         gen_output.push(
@@ -266,7 +267,8 @@ define on_setup_classes(source: Hash[String, parsekit.JsObject])
 
 define start_setup(root_obj: Hash[String, parsekit.JsObject])
 {
-    run_each(root_obj, "classes", on_setup_classes)
+    if root_obj["name"].as_string() != "builtin":
+        run_each(root_obj, "containers", on_setup_containers)
 }
 
 #[
@@ -312,7 +314,7 @@ define on_dyna_functions(
     var dyna_letter = "F"
     var generic_list = field_to_list(obj, "generics")
 
-    if parent.has_key("is_toplevel") == false:
+    if parent["kind"].as_string() != "module":
         dyna_letter = "m"
 
     var generics = generic_list.map(|m| m.as_string()).join(",")
@@ -351,63 +353,56 @@ define on_dyna_variants(
               ++ "\"")
 }
 
-define on_dyna_enums(class_obj: Hash[String, parsekit.JsObject])
+define on_dyna_containers(class_obj: Hash[String, parsekit.JsObject])
 {
-    var dyna_letter = "E"
-    var total_size = field_to_list(class_obj, "functions").size()
-    var generics = field_to_list(class_obj, "generics")
-            .map(|m| m.as_string() )
-            .join(",")
+    var dyna_letter = ""
+    var total_size = 0
+    var name = class_obj["name"].as_string()
+    var suffix = ""
+    var is_not_enum = class_obj["kind"].as_string() != "enum"
 
-    if generics:
-        generics = "[" ++ generics ++ "]"
+    dyna_class_names.push(name)
 
-    if class_obj.has_key("is_scoped"):
-        total_size += field_to_list(class_obj, "enums").size()
+    if is_not_enum: {
+        dyna_letter = "N\\"
+        total_size =
+            field_to_list(class_obj, "functions").size() +
+            field_to_list(class_obj, "properties").size()
 
-    gen_output.push(
-    "    ,\"" ++ dyna_letter
-              ++ "\\"
-              ++ oct(total_size)
-              ++ class_obj["name"].as_string()
-              ++ "\\0"
-              ++ generics
-              ++ "\"")
+        suffix = field_to_string(class_obj, "parent")
 
-    dyna_class_names.push(class_obj["name"].as_string())
-
-    run_each_child(class_obj, "functions", on_dyna_functions)
-    run_each_child(class_obj, "variants", on_dyna_variants)
-}
-
-define on_dyna_classes(class_obj: Hash[String, parsekit.JsObject])
-{
-    var dyna_letter = "N"
-    var total_size =
-        field_to_list(class_obj, "functions").size() +
-        field_to_list(class_obj, "properties").size()
-
-    var parent = field_to_string(class_obj, "parent")
-
-    if class_obj.has_key("is_foreign"):
-        dyna_letter = "C"
-    elif parent:
-        parent = "\\0< " ++ parent
+        if class_obj["kind"].as_string() == "foreign":
+            dyna_letter = "C\\"
+        elif suffix:
+            suffix = "\\0< " ++ suffix
+        else:
+            suffix = "\\0"
     else:
-        parent = "\\0"
+        dyna_letter = "E\\"
+        total_size = field_to_list(class_obj, "functions").size()
+
+        suffix = field_to_list(class_obj, "generics")
+                    .map(|m| m.as_string() )
+                    .join(",")
+
+        if suffix:
+            suffix = "\\0[" ++ suffix ++ "]"
+        else:
+            suffix = "\\0"
+
+        if class_obj.has_key("is_scoped"):
+            total_size += field_to_list(class_obj, "enums").size()
+    }
 
     gen_output.push(
-    "    ,\"" ++ dyna_letter
-                ++ "\\"
-                ++ oct(total_size)
-                ++ class_obj["name"].as_string()
-                ++ parent
-                ++ "\"")
-
-    dyna_class_names.push(class_obj["name"].as_string())
+    ["    ,\"", dyna_letter, oct(total_size), name, suffix, "\""].join())
 
     run_each_child(class_obj, "functions", on_dyna_functions)
-    run_each_child(class_obj, "properties", on_dyna_vars)
+
+    if is_not_enum:
+        run_each_child(class_obj, "properties", on_dyna_vars)
+    else:
+        run_each_child(class_obj, "variants", on_dyna_variants)
 }
 
 define start_dyna(root_obj: Hash[String, parsekit.JsObject])
@@ -416,8 +411,7 @@ define start_dyna(root_obj: Hash[String, parsekit.JsObject])
     gen_output.push("")
     var patch_index = gen_output.size()
 
-    run_each(root_obj, "classes", on_dyna_classes)
-    run_each(root_obj, "enums", on_dyna_enums)
+    run_each(root_obj, "containers", on_dyna_containers)
     run_each_child(root_obj, "functions", on_dyna_functions)
     run_each_child(root_obj, "vars", on_dyna_vars)
 
@@ -461,7 +455,7 @@ define on_proto_functions(
     var name = obj["name"].as_string()
     var class_name = ""
 
-    if parent.has_key("is_toplevel") == false:
+    if parent["kind"].as_string() != "module":
         class_name = parent["name"].as_string()
 
     if obj.has_key("is_ctor"):
@@ -473,11 +467,7 @@ define on_proto_functions(
 
 define start_proto(root_obj: Hash[String, parsekit.JsObject])
 {
-    run_each(root_obj, "classes", (|obj|
-        run_each_child(obj, "functions", on_proto_functions ) )
-    )
-
-    run_each(root_obj, "enums", (|obj|
+    run_each(root_obj, "containers", (|obj|
         run_each_child(obj, "functions", on_proto_functions ) )
     )
 
@@ -509,7 +499,7 @@ Offset stage
 var offset_index = 1
 var offset_pairs: Hash[String, Integer] = []
 
-define on_offset_class_or_enum(class_obj: Hash[String, parsekit.JsObject])
+define on_offset_containers(class_obj: Hash[String, parsekit.JsObject])
 {
     var name = class_obj["name"].as_string()
 
@@ -525,8 +515,7 @@ define on_offset_class_or_enum(class_obj: Hash[String, parsekit.JsObject])
 
 define start_offsets(root_obj: Hash[String, parsekit.JsObject])
 {
-    run_each(root_obj, "classes", on_offset_class_or_enum)
-    run_each(root_obj, "enums", on_offset_class_or_enum)
+    run_each(root_obj, "containers", on_offset_containers)
 
     if root_obj.has_key("functions") ||
        root_obj.has_key("vars"): {
@@ -568,7 +557,7 @@ define on_loader_functions(
     var parent_name = "toplevel"
     var class_name = ""
 
-    if parent.has_key("is_toplevel") == false: {
+    if parent["kind"].as_string() != "module": {
         parent_name = parent["name"].as_string()
         class_name = parent_name
     }
@@ -593,19 +582,12 @@ define start_loader(root_obj: Hash[String, parsekit.JsObject])
     gen_output.push(
         "    switch (id) {")
 
-    run_each(root_obj, "classes", (|obj|
+    run_each(root_obj, "containers", (|obj|
         loader_index += 1
         run_each_child(obj, "functions", on_loader_functions )
         loader_index +=
+            field_to_list(obj, "variants").size() +
             field_to_list(obj, "properties").size()
-        )
-    )
-
-    run_each(root_obj, "enums", (|obj|
-        loader_index += 1
-        run_each_child(obj, "functions", on_loader_functions )
-        loader_index +=
-            field_to_list(obj, "variants").size()
         )
     )
 
@@ -640,9 +622,6 @@ match p.read_until_done_or_error(): {
         var root_hash = root_obj.as_hash()
 
         gen_pkg_name = root_hash["name"].as_string()
-
-        if gen_pkg_name == "builtin":
-            starts.shift()
 
         for i in 0...starts.size() - 1:
             starts[i](root_hash)

@@ -462,7 +462,7 @@ class EngineCore {
     private var @self_obj = @unit_type_obj
 
     var @root_obj = [
-        "is_toplevel" => true |> JsBoolean,
+        "kind" => "module" |> JsString,
         "doc" => "" |> JsString
     ] |> JsHash
 
@@ -721,7 +721,7 @@ class EngineCore {
         var define_args: List[JsObject] = []
 
         if source.has_key("is_static") == false &&
-           @current_obj.as_hash().has_key("is_toplevel") == false: {
+           @current_obj.as_hash()["kind"].as_string() != "module": {
             define_args.push(
                 ["name" => "self" |> JsString,
                  "type" => @self_obj
@@ -1092,10 +1092,10 @@ class CSourceDriver(engine: EngineCore) {
         @scanner.require_word("class")
 
         var name = get_scope_name()
-        var boxed_class = @engine.new_scope(name, "classes")
+        var boxed_class = @engine.new_scope(name, "containers")
         var raw_class = boxed_class.as_hash()
 
-        raw_class["is_foreign"] = true |> JsBoolean
+        raw_class["kind"] = "foreign" |> JsString
 
         if @scanner.next_is(Token.LeftParenth):
             @engine.parse_constructor()
@@ -1122,8 +1122,10 @@ class CSourceDriver(engine: EngineCore) {
             raise ParseError($"Builtin class ^(name) not found.")
 
         var raw_class = boxed_class.unwrap()
-        var boxed_obj = @engine.new_scope(raw_class.name, "classes")
+        var boxed_obj = @engine.new_scope(raw_class.name, "containers")
         var raw_obj = boxed_obj.as_hash()
+
+        raw_obj["kind"] = "builtin" |> JsString
 
         @scanner.next()
         if @scanner.current_is(Token.LeftBracket): {
@@ -1139,10 +1141,10 @@ class CSourceDriver(engine: EngineCore) {
     private define cmd_native {
         @scanner.require_word("class")
         var name = get_scope_name()
-        var boxed_class = @engine.new_scope(name, "classes")
+        var boxed_class = @engine.new_scope(name, "containers")
         var raw_class = boxed_class.as_hash()
 
-        raw_class["is_builtin"] = true |> JsBoolean
+        raw_class["kind"] = "native" |> JsString
 
         if @scanner.next_is(Token.LeftBracket):
             @engine.parse_scope_generics(raw_class)
@@ -1167,10 +1169,11 @@ class CSourceDriver(engine: EngineCore) {
     private define cmd_enum(is_scoped: *Boolean = false) {
         var name = get_scope_name()
 
-        var boxed_enum = @engine.new_scope(name, "enums")
+        var boxed_enum = @engine.new_scope(name, "containers")
 
         var raw_enum = boxed_enum.as_hash()
         raw_enum["scoped"] = is_scoped |> JsBoolean
+        raw_enum["kind"] = "enum" |> JsString
 
         if @scanner.next_is(Token.LeftBracket):
             @engine.parse_scope_generics(raw_enum)

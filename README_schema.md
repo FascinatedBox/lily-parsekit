@@ -127,8 +127,7 @@ global, or the function is a class method that is public.
         "<generic name>"
     ] non-empty if present
 
-    "is_builtin": true or absent
-    "is_foreign": true or absent
+    "kind": "builtin" or "class" or "native"
     "parent": "<parent name>" or absent
 
     "properties": [
@@ -185,6 +184,8 @@ yet allow variant arguments to have names.
         "<generic name>"
     ] non-empty if present
 
+    "kind": "enum"
+
     "variants": [
         variant directive...
     ]
@@ -203,21 +204,18 @@ least two variants to select between).
 {
     "name": "<name>"
 
-    "classes": [
-        class directive...
-    ]
+    "containers": [
+        (class directive |
+         enum directive)...
+    ] | absent
 
     "doc": "<docstring>"
-
-    "enums": [
-        enum directive...
-    ]
 
     "functions": [
         function directive...
     ] or absent
 
-    "is_toplevel": true
+    "kind": "module"
 
     "vars": [
         var directive...
