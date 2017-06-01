@@ -6,9 +6,9 @@ The base of parsekit is the `EngineCore`, which is able to parse Lily snippets.
 Those snippets are transformed into Json-like objects (see JsValue defined
 below).
 
-Instead of using the EngineCore directly, most users will want to define a
-wrapper layer over it that feeds it incrementally. CSourceDriver provides a
-wrapper that reads Lily statements from the /** ... */ blocks in a .c file.
+This file also includes `CSourceDriver`, which reads special `/** ... */`
+comments in a .c file. Those are then fed incrementally to `EngineCore`, with
+the driver returning the engine's tree root.
 ]#
 
 class ParseError(message: String) < Exception(message) {  }
@@ -836,30 +836,29 @@ class EngineCore {
     }
 }
 
-class CBlockReader {
+class CSourceDriver(engine: EngineCore) {
+    private var @engine = engine
+    private var @scanner = engine.scanner
     private var @lines: List[String] = []
-    private var @pos = 0
-    private var @end_pos = 0
+    private var @read_pos = 0
+    private var @read_end_pos = 0
 
-    private var @autogen_start = -1
-    private var @autogen_end = -1
+    private var @is_builtin = false
 
-    var @command = ""
-    var @docblock = ""
-    var @line_num = 0
+    private var @current_scope_name = ""
 
     private define read_block_from(start: Integer): Boolean
     {
         var empty_line_pos = -1
 
-        for current in start...@end_pos: {
+        for current in start...@read_end_pos: {
             var line = @lines[current]
 
             if line == "*/": {
                 var found = false
                 var j = -1
 
-                for j in start + 1...@end_pos: {
+                for j in start + 1...@read_end_pos: {
                     line = @lines[j]
                     if line == "": {
                         found = true
@@ -871,11 +870,13 @@ class CBlockReader {
                     raise BlockError(start - 1,
                     "Block has no blank dividing line.")
 
-                @command = @lines.slice(start, j + 1).join("\n")
-                @docblock = @lines.slice(j, current).join("\n")
-                @line_num = start
+                var command = @lines.slice(start, j + 1).join("\n")
+                var doc = @lines.slice(j, current).join("\n")
+                var line_num = start
 
-                @pos = current + 1
+                @scanner.set_source(command, line_num)
+                @engine.pending_doc = doc
+                @read_pos = current + 1
 
                 return true
             }
@@ -885,19 +886,13 @@ class CBlockReader {
     }
 
     define read_next: Boolean {
-        var i = @pos
-        var end = @end_pos
+        var i = @read_pos
+        var end = @read_end_pos
 
         while i != end: {
-            var line = @lines[i]
-
-            if line.starts_with("/**"): {
-                if line == "/**":
-                    return read_block_from(i + 1)
-                elif line == "/** Begin autogen section. **/":
-                    @autogen_start = i
-                elif line == "/** End autogen section. **/":
-                    @autogen_end = i + 1
+            if @lines[i] == "/**": {
+                read_block_from(i + 1)
+                return true
             }
 
             i += 1
@@ -905,63 +900,6 @@ class CBlockReader {
 
         return false
     }
-
-    define get_header: List[String] {
-        if @autogen_start > 0 &&
-           @autogen_start < @autogen_end:
-            return @lines.slice(0, @autogen_start + 1)
-        else:
-            return []
-    }
-
-    define get_footer: List[String] {
-        if @autogen_end > @autogen_start:
-            return @lines.slice(@autogen_end - 1)
-        else:
-            return []
-    }
-
-    define verify_header_footer {
-        if @autogen_start > 0 &&
-           @autogen_start < @autogen_end:
-            0
-        else:
-            raise BlockError(@end_pos,
-                    "No '/** Begin autogen section. **/' marker found.")
-
-        if @autogen_end > @autogen_start:
-            0
-        else:
-            raise BlockError(@end_pos,
-                    "No '/** End autogen section. **/' marker found.")
-    }
-
-    define load_file(filename: String) {
-        var local_lines: List[String] = []
-
-        var f = File.open(filename, "r")
-        f.each_line(|l| l.encode().unwrap() |> local_lines.push )
-        f.close()
-
-        @lines = local_lines
-        @end_pos = local_lines.size() - 1
-    }
-}
-
-#[
-This uses CBlockReader to read a .c source file. It feeds the engine the Lily
-code that's held between the /** ... */ blocks.
-]#
-
-class CSourceDriver(engine: EngineCore) {
-    private var @engine = engine
-    private var @scanner = engine.scanner
-    private var @reader = CBlockReader()
-    private var @need_header_footer = false
-
-    private var @is_builtin = false
-
-    private var @current_scope_name = ""
 
     private define get_scope_name: String {
         var name = @engine.scanner.require(Token.Word)
@@ -1284,33 +1222,10 @@ class CSourceDriver(engine: EngineCore) {
         @scanner.expect(Token.EndOfFile)
     }
 
-    define get_header: List[String] {
-        return @reader.get_header()
-    }
-
-    define get_footer: List[String] {
-        return @reader.get_footer()
-    }
-
-    define require_header_footer {
-        @need_header_footer = true
-    }
-
-    define load_file(filename: String) {
-        @reader.load_file(filename)
-    }
-
-    define read_until_done_or_error: Result[Tuple[String, Integer], JsObject] {
+    private define read_blocks: Result[Tuple[String, Integer], JsObject] {
         try: {
-            while @reader.read_next(): {
-                @scanner.set_source(@reader.command, @reader.line_num)
-                @engine.pending_doc = @reader.docblock
-
+            while read_next():
                 parse_block()
-            }
-
-            if @need_header_footer:
-                @reader.verify_header_footer()
         except ParseError as e:
             return Failure(<[e.message, @scanner.line_num]>)
         except BlockError as e:
@@ -1318,5 +1233,29 @@ class CSourceDriver(engine: EngineCore) {
         }
 
         return Success(@engine.root_obj)
+    }
+
+    define process_file(filename: String)
+        : Result[Tuple[String, Integer], JsObject]
+    {
+        var local_lines: List[String] = []
+
+        var f = File.open(filename, "r")
+        f.each_line(|l| l.encode().unwrap() |> local_lines.push )
+        f.close()
+
+        @lines = local_lines
+        @read_end_pos = local_lines.size() - 1
+
+        return read_blocks()
+    }
+
+    define process_lines(to_read: List[String])
+        : Result[Tuple[String, Integer], JsObject]
+    {
+        @lines = to_read
+        @read_end_pos = to_read.size() - 1
+
+        return read_blocks()
     }
 }

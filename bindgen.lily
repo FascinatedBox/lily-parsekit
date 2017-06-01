@@ -599,38 +599,101 @@ define start_loader(root_obj: Hash[String, parsekit.JsObject])
     gen_output.push("}")
 }
 
+define load_source_lines(name: String): List[String]
+{
+    var f = File.open(name, "r")
+    var lines: List[String] = []
+
+    f.each_line(|l| l.encode().unwrap() |> lines.push )
+    f.close()
+
+    return lines
+}
+
+define get_autogen_range(lines: List[String])
+    : Tuple[Integer, Integer]
+{
+    var autogen_start = -1
+    var autogen_end = -1
+
+    for i in 0...lines.size() - 1: {
+        var l = lines[i]
+        if l.starts_with("/**"): {
+            if l == "/** Begin autogen section. **/": {
+                autogen_start = i
+            elif l == "/** End autogen section. **/":
+                autogen_end = i + 1
+                break
+            }
+        }
+    }
+
+    return <[autogen_start, autogen_end]>
+}
+
+define verify_autogen_range(range: Tuple[Integer, Integer])
+    : Boolean
+{
+    var ok = false
+
+    if range[0] == -1:
+        print("bindgen: Error: No '/** Begin autogen section. **/' marker found.")
+    elif range[1] == -1:
+        print("bindgen: Error: No '/** End autogen section. **/' marker found.")
+    elif range[0] > range[1]:
+        print("bindgen: Error: autogen end after start.")
+    else:
+        ok = true
+
+    return ok
+}
+
+define run_bindgen(
+    source_lines: List[String],
+    path: String,
+    autogen_range: Tuple[Integer, Integer])
+{
+    if verify_autogen_range(autogen_range) == false:
+        return
+
+    var driver = parsekit.CSourceDriver(parsekit.EngineCore())
+
+    match driver.process_lines(source_lines): {
+        case Failure(f):
+            print($"bindgen: Processing error: ^(f[0])\n    from line ^(f[1]).")
+        case Success(root_obj):
+            var starts =
+                [start_setup,
+                start_dyna,
+                start_offsets,
+                start_proto,
+                start_loader]
+
+            var root_hash = root_obj.as_hash()
+
+            gen_pkg_name = root_hash["name"].as_string()
+
+            for i in 0...starts.size() - 1:
+                starts[i](root_hash)
+
+            var f = File.open(path, "w")
+            var header = source_lines.slice(0, autogen_range[0] + 1)
+            var footer = source_lines.slice(autogen_range[1] - 1)
+
+            header.each(|e|     f.print(e) )
+            gen_output.each(|e| f.print(e) )
+            footer.each(|e|     f.print(e) )
+
+            f.close()
+    }
+}
+
 import sys
 
 var file_name = sys.argv[1]
 print("bindgen: Processing " ++ file_name ++ ".")
 
-var p = parsekit.CSourceDriver(parsekit.EngineCore())
-p.require_header_footer()
-p.load_file(file_name)
+var source_lines = load_source_lines(file_name)
+var autogen_range = get_autogen_range(source_lines)
 
-match p.read_until_done_or_error(): {
-    case Failure(error):
-        print($"bindgen: Processing error: ^(error[0])\n    from line ^(error[1]).")
-    case Success(root_obj):
-        var starts =
-            [start_setup,
-             start_dyna,
-             start_offsets,
-             start_proto,
-             start_loader]
-
-        var root_hash = root_obj.as_hash()
-
-        gen_pkg_name = root_hash["name"].as_string()
-
-        for i in 0...starts.size() - 1:
-            starts[i](root_hash)
-
-        var f = File.open(file_name, "w")
-
-        p.get_header().each(|e| f.print(e) )
-        gen_output.each(|e|     f.print(e) )
-        p.get_footer().each(|e| f.print(e) )
-
-        f.close()
-}
+run_bindgen(source_lines, file_name, autogen_range)
