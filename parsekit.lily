@@ -843,7 +843,7 @@ class CSourceDriver(engine: EngineCore) {
     private var @read_pos = 0
     private var @read_end_pos = 0
 
-    private var @is_builtin = false
+    private var @root_name = ""
 
     private var @current_scope_name = ""
 
@@ -1008,13 +1008,11 @@ class CSourceDriver(engine: EngineCore) {
     }
 
     private define cmd_library {
-        var name = @scanner.require(Token.Word)
-
-        if name == "builtin":
-            @is_builtin = true
+        @root_name = @scanner.require(Token.Word)
 
         var root = @engine.root_obj.as_hash()
-        root["name"] = name |> JsString
+
+        root["name"] = @root_name |> JsString
         root["doc"] = @engine.pending_doc |> JsString
         @scanner.next()
     }
@@ -1042,7 +1040,7 @@ class CSourceDriver(engine: EngineCore) {
     }
 
     private define cmd_builtin {
-        if @is_builtin == false:
+        if @root_name != "builtin":
             raise ParseError("'builtin' strictly for the builtin package.")
 
         @scanner.require_word("class")
