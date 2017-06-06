@@ -769,10 +769,9 @@ define write_shortdescs(
     }
 }
 
-define gen_module_file(
-    state: ModuleDocState,
-    root_obj: Hash[String, parsekit.JsObject])
+define gen_module_file(state: ModuleDocState)
 {
+    var root_obj = state.root
     var root_name = root_obj["name"].as_string()
     var ref_name = "module." ++ root_name
     var module_doc = render_doc(root_obj["doc"], ref_name)
@@ -823,7 +822,7 @@ define start_docgen(
 
     state.load_decls()
     mkdir.mkdir(base_dir)
-    gen_module_file(state, root_obj)
+    gen_module_file(state)
     create_docstyle_css(asset_dir, base_dir)
 }
 
