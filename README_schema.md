@@ -198,7 +198,7 @@ simply `enum`.
 Variants is always present (and should always be occupied by an enum with at
 least two variants to select between).
 
-## Toplevel
+## Module
 
 ```
 {
@@ -219,6 +219,10 @@ least two variants to select between).
 
     "vars": [
         var directive...
+    ] | absent
+
+    "modules": [
+        module directive...
     ] | absent
 }
 ```

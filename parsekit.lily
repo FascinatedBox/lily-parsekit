@@ -1182,6 +1182,24 @@ class CSourceDriver(engine: EngineCore) {
         @engine.push_field_elem("vars", raw_var |> JsHash)
     }
 
+    private define cmd_package_files {
+        if @root_name != "core":
+            raise ParseError("'PackageFiles' strictly for the core package.")
+
+        var paths = @scanner.strify_to_end()
+                            .split("\n")
+                            .map(|m| m.strip(" ") )
+                            .reject(|s| s == "" )
+                            .map(|m| JsString(m) )
+                            |> JsList
+        var root = @engine.root_obj.as_hash()
+
+        root["paths"] = paths
+        # So that this command ends with EOF.
+        @scanner.set_source("")
+        @scanner.next()
+    }
+
     private define parse_block {
         var command = @scanner.require(Token.Word)
 
@@ -1205,6 +1223,8 @@ class CSourceDriver(engine: EngineCore) {
             cmd_builtin()
         elif command == "library":
             cmd_library()
+        elif command == "PackageFiles":
+            cmd_package_files()
         else:
             raise ParseError($"Unknown command '^(command)'.")
 
@@ -1224,6 +1244,15 @@ class CSourceDriver(engine: EngineCore) {
         return Success(@engine.root_obj)
     }
 
+    define process_lines(to_read: List[String])
+        : Result[Tuple[String, Integer], JsObject]
+    {
+        @lines = to_read
+        @read_end_pos = to_read.size() - 1
+
+        return read_blocks()
+    }
+
     define process_file(filename: String)
         : Result[Tuple[String, Integer], JsObject]
     {
@@ -1236,15 +1265,31 @@ class CSourceDriver(engine: EngineCore) {
         @lines = local_lines
         @read_end_pos = local_lines.size() - 1
 
-        return read_blocks()
-    }
+        var result = read_blocks()
 
-    define process_lines(to_read: List[String])
-        : Result[Tuple[String, Integer], JsObject]
-    {
-        @lines = to_read
-        @read_end_pos = to_read.size() - 1
+        if result.is_success() && @root_name == "core": {
+            var split_base_dir = filename.split("/")
 
-        return read_blocks()
+            split_base_dir[-1] = ""
+
+            var base_dir = split_base_dir.join("/")
+            var root = result.success().unwrap().as_hash()
+            var paths = root["paths"].as_list()
+            var modules: List[JsObject] = []
+
+            for i in 0...paths.size() - 1: {
+                var driver = CSourceDriver(EngineCore())
+
+                driver.process_file(base_dir ++ paths[i].as_string())
+                      .success()
+                      .unwrap()
+                      |> modules.push
+            }
+
+            root["modules"] = modules |> JsList
+            root.delete("paths")
+        }
+
+        return result
     }
 }
