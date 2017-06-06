@@ -1019,13 +1019,6 @@ class CSourceDriver(engine: EngineCore) {
         @scanner.next()
     }
 
-    private define cmd_source {
-        @scanner.require(Token.DoubleQuote)
-        var root = @engine.root_obj.as_hash()
-        root["source"] = @scanner.current_str().slice(1, -1) |> JsString
-        @scanner.next()
-    }
-
     private define cmd_foreign {
         @scanner.require_word("class")
 
@@ -1214,8 +1207,6 @@ class CSourceDriver(engine: EngineCore) {
             cmd_builtin()
         elif command == "library":
             cmd_library()
-        elif command == "source":
-            cmd_source()
         else:
             raise ParseError($"Unknown command '^(command)'.")
 
