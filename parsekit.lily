@@ -889,7 +889,7 @@ class CSourceDriver(engine: EngineCore) {
         var i = @read_pos
         var end = @read_end_pos
 
-        while i != end: {
+        while i < end: {
             if @lines[i] == "/**": {
                 read_block_from(i + 1)
                 return true
