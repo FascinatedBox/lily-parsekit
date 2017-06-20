@@ -254,7 +254,7 @@ define on_setup_containers(source: Hash[String, parsekit.JsObject])
     if layout_list.size(): {
         gen_output.push(
         ("#define INIT_{0}(state)\\\n" ++
-         "({1} *) lily_new_foreign(state, " ++
+         "({1} *) lily_push_foreign(state, " ++
          "ID_{0}(state), " ++
          "(lily_destroy_func)destroy_{0}, " ++
          "sizeof({1}))")
