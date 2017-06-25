@@ -110,7 +110,7 @@ class ModuleDocState(
         }
 
         # todo: The parsekit base should verify parent lineage
-        raise RuntimeError($"Could not find parent class '^(name)'.")
+        raise RuntimeError("Could not find parent class '{0}'.".format(name))
     }
 
     define push(input: String) { @lines.push(input) }
@@ -300,7 +300,7 @@ define render_property(obj: Hash[String, parsekit.JsObject])
     else:
         qual = qual ++ " "
 
-    return $"    ^(qual)var @^(name): ^(type_str)"
+    return "    {0}var @{1}: {2}".format(qual, name, type_str)
 }
 
 define write_properties_from(
@@ -357,7 +357,7 @@ define write_variants(
         if arg_str:
             arg_str = "(" ++ arg_str ++ ")"
 
-        var out = $"    ^(name)^(arg_str)"
+        var out = "    {0}{1}".format(name, arg_str)
 
         if i != last:
             out = out ++ ","
@@ -456,7 +456,8 @@ define render_one_doc_line(input_line: String): String
     }
 
     if in_backtick:
-        raise RenderError($"Uneven number of quote marks in: ^(input_line).")
+        raise RenderError("Uneven number of quote marks in: {0}."
+                .format(input_line))
 
     input_line.slice(slice_start) |> out_cache.push
     return out_cache.join()
@@ -638,7 +639,7 @@ define gen_enum_file(
     var doc = render_doc(enum_obj["doc"], "enum." ++ name)
 
     state.push("<h1>Enum " ++ name ++ "</h1>")
-    state.push($"<pre>^(scope_str)enum ^(name)^(generics) {")
+    state.push("<pre>" ++ scope_str ++ "enum " ++ name ++ generics ++ " {")
     write_variants(state, enum_obj)
     state.push("}</pre>")
     state.push("<div class='doc'>" ++ doc ++ "</div>")
@@ -657,7 +658,7 @@ define gen_class_file(
         # Foreign classes have "fields" with their C fields.
         # No generics or parent though.
 
-        state.push($"<pre>(foreign) class ^(name) {")
+        state.push("<pre>(foreign) class " ++ name ++ " {")
 
         # Omit the first, which is always LILY_FOREIGN_HEADER
         field_to_list(class_obj, "fields")
@@ -680,7 +681,7 @@ define gen_class_file(
         if generics:
             generics = "[" ++ generics ++ "]"
 
-        state.push($"<pre>class ^(name)^(generics)^(parent) {")
+        state.push("<pre>class " ++ name ++ generics ++ parent ++ " {")
         write_properties_from(state, class_obj)
         state.push("}</pre>")
     else:
@@ -697,7 +698,7 @@ define gen_class_file(
         if generics:
             generics = "[" ++ generics ++ "]"
 
-        state.push($"<pre>(builtin) class ^(name)^(generics) {  }</pre>")
+        state.push("<pre>(builtin) class " ++ name ++ generics ++ " {  }</pre>")
     }
 
     var doc = render_doc(class_obj["doc"], "class." ++ name)
@@ -851,7 +852,8 @@ var p = parsekit.CSourceDriver(parsekit.EngineCore())
 
 match p.process_file(file_name): {
     case Failure(f):
-        print($"docgen: Processing error: ^(f[0])\n    from line ^(f[1]).")
+        print("docgen: Processing error: {0}\n    from line {1}."
+                .format(f[0], f[1]))
     case Success(root_obj):
         try:
             base_dir = sys.argv[2]

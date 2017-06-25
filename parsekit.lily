@@ -336,10 +336,10 @@ class EngineScanner
 
     define expect(tok: Token) {
         if @last_tok != tok: {
-            var got = $"^(@last_tok)"
+            var got = "{0}".format(@last_tok)
 
             if @last_tok == Token.Word:
-                got = $"'^(@last_str)'"
+                got = "'{0}'".format(@last_tok)
 
             raise ParseError("Expected {0}, not {1}.".format(tok, got))
         }
@@ -349,14 +349,14 @@ class EngineScanner
         if @last_tok != Token.Word ||
             (value != "" && @last_str != value):
             raise ParseError(
-                    $"Expected '^(value)', not '^(@last_tok).")
+                    "Expected '{0}', not '{1}.".format(value, @last_tok))
 
         return @last_str
     }
 
     define expect_any(tokens: Token...) {
         raise ParseError("Expected one of {0} but got {1}."
-                .format(tokens.map(|t| $"^(t)" ).join(", "), @last_tok))
+                .format(tokens.map(|t| "{0}".format(t) ).join(", "), @last_tok))
     }
 
     define require(tok: Token): String {
@@ -596,7 +596,7 @@ class EngineCore {
         var entry = find_class(class_name)
 
         if entry.is_none():
-            raise ParseError($"Class '^(class_name)' does not exist.")
+            raise ParseError("Class '{0}' does not exist.".format(class_name))
 
         var raw_class = entry.unwrap()
         var args: List[JsObject] = []
@@ -1048,7 +1048,7 @@ class CSourceDriver(engine: EngineCore) {
 
         var boxed_class = @engine.find_class(name)
         if boxed_class.is_none():
-            raise ParseError($"Builtin class ^(name) not found.")
+            raise ParseError("Builtin class {0} not found.".format(name))
 
         var raw_class = boxed_class.unwrap()
         var boxed_obj = @engine.new_scope(raw_class.name, "containers")
@@ -1226,7 +1226,7 @@ class CSourceDriver(engine: EngineCore) {
         elif command == "PackageFiles":
             cmd_package_files()
         else:
-            raise ParseError($"Unknown command '^(command)'.")
+            raise ParseError("Unknown command '{0}'.".format(command))
 
         @scanner.expect(Token.EndOfFile)
     }

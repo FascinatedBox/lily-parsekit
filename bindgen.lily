@@ -226,7 +226,7 @@ define on_setup_containers(source: Hash[String, parsekit.JsObject])
         return
 
     var cls_name = source["name"].as_string()
-    var full_name = $"lily_^(gen_pkg_name)_^(cls_name)"
+    var full_name = "lily_{0}_{1}".format(gen_pkg_name, cls_name)
 
     var did_add = false
     var layout_list = field_to_list(source, "fields")
@@ -424,7 +424,8 @@ define start_dyna(root_obj: Hash[String, parsekit.JsObject])
     var dyna_names = dyna_class_names.join("\\0")
     var dyna_size = dyna_class_names.size() |> oct
 
-    gen_output[patch_index-1] = $"    \"\\^(dyna_size)^(dyna_names)\\0\""
+    gen_output[patch_index-1] =
+            "    \"\\{0}{1}\\0\"".format(dyna_size, dyna_names)
 }
 
 #[
@@ -660,7 +661,8 @@ define run_bindgen(
 
     match driver.process_lines(source_lines): {
         case Failure(f):
-            print($"bindgen: Processing error: ^(f[0])\n    from line ^(f[1]).")
+            print("bindgen: Processing error: {0}\n    from line {1}."
+                    .format(f[0], f[1]))
         case Success(root_obj):
             var starts =
                 [start_setup,
