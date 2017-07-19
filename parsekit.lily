@@ -279,15 +279,7 @@ class EngineScanner
 
                     @source_pos += 2
 
-                    # This is a special type that accepts all types it sees.
-                    # Used for Function.doc and Tuple methods.
-                    # For simplicity (and for now), rewrite this as a word and
-                    # allow it to pass through unchecked. Later on, tell the
-                    # real story and have the parser verify proper use of it.
-                    # It's currently in the interpreter as 1 or 2, so write it
-                    # down as that until the interpreter is updated.
-
-                    result_str = (ch.to_i() - '0'.to_i()).to_s()
+                    result_str = "$" ++ (ch.to_i() - '0'.to_i()).to_s()
                     result_tok = Token.Word
                 case Token.PoundSign:
                     result_str = scan_comment_block()
@@ -491,8 +483,8 @@ class EngineCore {
         ClassSym("IndexError", 0),
         ClassSym("DivisionByZeroError", 0),
         ClassSym("AssertionError", 0),
-        ClassSym("1", 0),
-        ClassSym("2", 0)
+        ClassSym("$1", 0),
+        ClassSym("$2", 0)
     ]
 
     private var @generic_classes = [
