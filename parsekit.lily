@@ -85,9 +85,9 @@ class EngineScanner
     private var @source = ""
     private var @last_tok = Token.EndOfFile
     private var @last_str = ""
-    var @line_num = 0
+    public var @line_num = 0
 
-    define set_source(new_source: String, offset: *Integer = 1) {
+    public define set_source(new_source: String, offset: *Integer = 1) {
         new_source = new_source ++ "\n"
         @source = new_source
         @source_bytes = new_source.to_bytestring()
@@ -145,7 +145,7 @@ class EngineScanner
         return pending_lines.map(|line| line.lstrip(" \t") ).join("\n")
     }
 
-    define next {
+    public define next {
         var result_tok = Token.EndOfFile
         var result_str = ""
 
@@ -304,29 +304,29 @@ class EngineScanner
         @last_str = result_str
     }
 
-    define next_tok: Token {
+    public define next_tok: Token {
         next()
         return @last_tok
     }
 
-    define current_tok: Token {
+    public define current_tok: Token {
         return @last_tok
     }
 
-    define current_str: String {
+    public define current_str: String {
         return @last_str
     }
 
-    define current_is(expected_token: Token): Boolean {
+    public define current_is(expected_token: Token): Boolean {
         return @last_tok == expected_token
     }
 
-    define next_is(expected_token: Token): Boolean {
+    public define next_is(expected_token: Token): Boolean {
         next()
         return @last_tok == expected_token
     }
 
-    define expect(tok: Token) {
+    public define expect(tok: Token) {
         if @last_tok != tok: {
             var got = "{0}".format(@last_tok)
 
@@ -337,7 +337,7 @@ class EngineScanner
         }
     }
 
-    define expect_word(value: *String=""): String {
+    public define expect_word(value: *String=""): String {
         if @last_tok != Token.Word ||
             (value != "" && @last_str != value):
             raise ParseError(
@@ -346,18 +346,18 @@ class EngineScanner
         return @last_str
     }
 
-    define expect_any(tokens: Token...) {
+    public define expect_any(tokens: Token...) {
         raise ParseError("Expected one of {0} but got {1}."
                 .format(tokens.map(|t| "{0}".format(t) ).join(", "), @last_tok))
     }
 
-    define require(tok: Token): String {
+    public define require(tok: Token): String {
         next()
         expect(tok)
         return @last_str
     }
 
-    define require_word(value: String): String {
+    public define require_word(value: String): String {
         next()
         return expect_word(value)
     }
@@ -368,7 +368,7 @@ class EngineScanner
     # used primarily to get the doc blocks that occur after commands.
     #
     # This doesn't modify the scanner's position.
-    define strify_to_end: String {
+    public define strify_to_end: String {
         return @source.slice(@source_pos)
     }
 }
@@ -435,8 +435,8 @@ This is the raw engine that processes Lily statements, turning them into a tree
 of JsObject values.
 ]#
 class EngineCore {
-    var @pending_doc = ""
-    var @scanner = EngineScanner()
+    public var @pending_doc = ""
+    public var @scanner = EngineScanner()
 
     private var @unit_type = [
         "name" => "Unit" |> JsString
@@ -453,7 +453,7 @@ class EngineCore {
 
     private var @self_obj = @unit_type_obj
 
-    var @root_obj = [
+    public var @root_obj = [
         "kind" => "module" |> JsString,
         "doc" => "" |> JsString
     ] |> JsHash
@@ -495,16 +495,16 @@ class EngineCore {
         ClassSym("E", 0)
     ]
 
-    define leave_scope {
+    public define leave_scope {
         @current_obj = @root_obj
         @visible_generics = []
     }
 
-    define get_js_root: JsObject {
+    public define get_js_root: JsObject {
         return @root_obj
     }
 
-    define push_field_elem(field_name: String, what: JsObject) {
+    public define push_field_elem(field_name: String, what: JsObject) {
         var current_hash = @current_obj.as_hash()
 
         try: {
@@ -514,7 +514,7 @@ class EngineCore {
         }
     }
 
-    define new_scope(name: String, field_name: String): JsObject {
+    public define new_scope(name: String, field_name: String): JsObject {
         var h = [
             "name" => name |> JsString,
             "doc" => @pending_doc |> JsString
@@ -552,7 +552,7 @@ class EngineCore {
         return @scanner.current_str()
     }
 
-    define find_class(name: String): Option[ClassSym] {
+    public define find_class(name: String): Option[ClassSym] {
         var entry: Option[ClassSym] = None
 
         for i in 0...@classes.size() - 1: {
@@ -575,7 +575,7 @@ class EngineCore {
         return entry
     }
 
-    define scan_type: JsObject {
+    public define scan_type: JsObject {
         var is_optarg = false
         if @scanner.current_tok() == Token.Multiply: {
             is_optarg = true
@@ -693,7 +693,7 @@ class EngineCore {
         return @full_generic_names.slice(0, index)
     }
 
-    define parse_scope_generics(target: Hash[String, JsObject]) {
+    public define parse_scope_generics(target: Hash[String, JsObject]) {
         var g = parse_generics_from(0)
 
         var class_name = target["name"].as_string()
@@ -709,7 +709,7 @@ class EngineCore {
         @visible_generics = g
     }
 
-    define parse_define_body(source: Hash[String, JsObject]) {
+    public define parse_define_body(source: Hash[String, JsObject]) {
         var define_args: List[JsObject] = []
 
         if source.has_key("is_static") == false &&
@@ -791,7 +791,7 @@ class EngineCore {
         @visible_generics = save_generics
     }
 
-    define parse_constructor {
+    public define parse_constructor {
         parse_define_body(
             ["name" => "<new>" |> JsString,
              "is_static" => true |> JsBoolean,
@@ -799,7 +799,7 @@ class EngineCore {
             ])
     }
 
-    define parse_variant_args: JsObject {
+    public define parse_variant_args: JsObject {
         var variant_args: List[JsObject] = []
         @scanner.next()
 
@@ -877,7 +877,7 @@ class CSourceDriver(engine: EngineCore) {
         raise BlockError(start - 1, "Block is unterminated.")
     }
 
-    define read_next: Boolean {
+    public define read_next: Boolean {
         var i = @read_pos
         var end = @read_end_pos
 
@@ -1236,7 +1236,7 @@ class CSourceDriver(engine: EngineCore) {
         return Success(@engine.root_obj)
     }
 
-    define process_lines(to_read: List[String])
+    public define process_lines(to_read: List[String])
         : Result[Tuple[String, Integer], JsObject]
     {
         @lines = to_read
@@ -1245,7 +1245,7 @@ class CSourceDriver(engine: EngineCore) {
         return read_blocks()
     }
 
-    define process_file(filename: String)
+    public define process_file(filename: String)
         : Result[Tuple[String, Integer], JsObject]
     {
         var local_lines: List[String] = []

@@ -66,7 +66,7 @@ class ModuleDocState(
     private var @class_decls: List[String] = []
     private var @enum_decls: List[String] = []
 
-    define load_decls {
+    public define load_decls {
         var containers = field_to_list(@root, "containers")
 
         for i in 0...containers.size() - 1: {
@@ -81,7 +81,7 @@ class ModuleDocState(
         }
     }
 
-    define has_class(name: String): Boolean {
+    public define has_class(name: String): Boolean {
         for i in 0...@class_decls.size() - 1:
             if @class_decls[i] == name:
                 return true
@@ -89,7 +89,7 @@ class ModuleDocState(
         return false
     }
 
-    define has_enum(name: String): Boolean {
+    public define has_enum(name: String): Boolean {
         for i in 0...@enum_decls.size() - 1:
             if @enum_decls[i] == name:
                 return true
@@ -97,7 +97,7 @@ class ModuleDocState(
         return false
     }
 
-    define find_class_obj(name: String)
+    public define find_class_obj(name: String)
         : Hash[String, parsekit.JsObject]
     {
         var classes = field_to_list(@root, "classes")
@@ -113,9 +113,9 @@ class ModuleDocState(
         raise RuntimeError("Could not find parent class '{0}'.".format(name))
     }
 
-    define push(input: String) { @lines.push(input) }
+    public define push(input: String) { @lines.push(input) }
 
-    define generate_for(object: Hash[String, parsekit.JsObject]) {
+    public define generate_for(object: Hash[String, parsekit.JsObject]) {
         var name = object["name"].as_string()
         var kind = object["kind"].as_string()
         var title = ""
