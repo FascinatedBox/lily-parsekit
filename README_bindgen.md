@@ -1,9 +1,9 @@
-lilybind
+Bindgen
 ========
 
 Usage: `lily bindgen.lily <some c file>`
 
-Lilybind is a tool for helping extend the Lily interpreter with new classes,
+Bindgen is a tool for helping extend the Lily interpreter with new classes,
 enums, methods, and so on. This tool generates bindings for the interpreter to
 load what you've made. Before you begin, you should be familiar with writing
 Lily code, and also comfortable with C as well.
@@ -130,18 +130,19 @@ publically accessible. As for initialization, it works as follows:
 ```
 void lily_builtin_Exception_new(lily_state *s)
 {
-    lily_container_val *result;
-    lily_instance_super(s, &result, ID_Exception, 2);
+    lily_container_val *result = lily_push_super(s, id, 2);
 
-    lily_nth_set(result, 0, lily_arg_value(s, 0));
-    lily_nth_set(result, 1, lily_box_list(s, lily_new_list(0)));
-    lily_return_value(s, lily_take_value(s));
+    lily_con_set(result, 0, lily_arg_value(s, 0));
+
+    lily_push_list(s, 0);
+    lily_con_set_from_stack(s, result, 1);
+    lily_return_super(s);
 }
 ```
 
-The function `lily_instance_super` will check to see if an in-progress class has
-been passed. If so, that class is assigned to `result`. Otherwise, a fresh
-instance with 2 properties is created.
+The function `lily_push_super` will check to see if an in-progress class has
+been passed. It will return either that, or a newly-made instance. From there,
+the message (0) and traceback (1) fields are set.
 
 ### foreign class <name> <ctor>? '{' <layout> '}'
 
@@ -170,11 +171,10 @@ One example of initializing the given struct:
     PGconn *conn = PQsetdbLogin(...);
 
     if (PQstatus(conn) == CONNECTION_OK) {
-        lily_postgres_Conn *c;
-        INIT_Conn(c);
+        lily_postgres_Conn *c = INIT_Conn(state)
         c->is_open = 1;
         c->conn = conn;
-        lily_return_foreign(state, (lily_foreign_val *)c);
+        lily_return_top(state, (lily_foreign_val *)c);
     }
     else {
         /* error handling */
@@ -237,10 +237,11 @@ void lily_math__add(lily_state *s)
 ### var <name> ':' <type>
 
 This makes `<name>` available to the interpreter. Var loading is done by having
-a var loading function push a value onto the interpreter. A var loader can push
-a value as simple or as complex as they wish. A var loader should never have
-side-effects such as executing code or relying on global data. Here's an example
-that exports apache's request method as `server.http_method`.
+a var loading function push a value onto the interpreter. Var loaders must begin
+with `load_var_` as a prefix. A var loader can push a value as simple or as
+complex as they wish. A var loader should never have side-effects such as
+executing code or relying on global data. Here's an example that exports
+apache's request method as `server.http_method`.
 
 ```
 /**
@@ -249,10 +250,10 @@ var http_method: String
 This is the method that was used to make the request to the server.
 Common values are "GET", and "POST".
 */
-static void lily_server_var_http_method(lily_state *s)
+static void load_var_http_method(lily_state *s)
 {
-    request_rec *r = (request_rec *)lily_op_get_data(s);
+    request_rec *r = (request_rec *)lily_config_get(s)->data;
 
-    lily_push_string(s, lily_new_string(r->method));
+    lily_push_string(s, r->method);
 }
 ```
