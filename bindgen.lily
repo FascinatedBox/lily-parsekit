@@ -358,41 +358,39 @@ define on_dyna_containers(class_obj: Hash[String, parsekit.JsObject])
     var dyna_letter = ""
     var total_size = 0
     var name = class_obj["name"].as_string()
-    var suffix = ""
     var is_not_enum = class_obj["kind"].as_string() != "enum"
+    var parent = ""
 
     dyna_class_names.push(name)
 
     if is_not_enum: {
-        dyna_letter = "N\\"
+        if class_obj["kind"].as_string() == "foreign":
+            dyna_letter = "C\\"
+        else:
+            dyna_letter = "N\\"
+
+        parent = field_to_string(class_obj, "parent")
         total_size =
             field_to_list(class_obj, "functions").size() +
             field_to_list(class_obj, "properties").size()
-
-        suffix = field_to_string(class_obj, "parent")
-
-        if class_obj["kind"].as_string() == "foreign":
-            dyna_letter = "C\\"
-        elif suffix:
-            suffix = "\\0< " ++ suffix
-        else:
-            suffix = "\\0"
     else:
         dyna_letter = "E\\"
         total_size = field_to_list(class_obj, "functions").size()
 
-        suffix = field_to_list(class_obj, "generics")
-                    .map(|m| m.as_string() )
-                    .join(",")
-
-        if suffix:
-            suffix = "\\0[" ++ suffix ++ "]"
-        else:
-            suffix = "\\0"
-
         if class_obj.has_key("is_scoped"):
             total_size += field_to_list(class_obj, "enums").size()
     }
+
+    var suffix = "\\0"
+    var generics = field_to_list(class_obj, "generics")
+                    .map(|m| m.as_string() )
+                    .join(",")
+
+    if generics:
+        suffix = suffix ++ "[" ++ generics ++ "]"
+
+    if parent:
+        suffix = suffix ++ "< " ++ parent
 
     gen_output.push(
     ["    ,\"", dyna_letter, oct(total_size), name, suffix, "\""].join())
