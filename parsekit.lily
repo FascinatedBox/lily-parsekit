@@ -1088,12 +1088,18 @@ class CSourceDriver(engine: EngineCore) {
     }
 
     private define cmd_enum(is_scoped: *Boolean = false) {
+        if is_scoped == true:
+            @scanner.require_word("enum")
+
         var name = get_scope_name()
 
         var boxed_enum = @engine.new_scope(name, "containers")
 
         var raw_enum = boxed_enum.as_hash()
-        raw_enum["scoped"] = is_scoped |> JsBoolean
+
+        if is_scoped:
+            raw_enum["is_scoped"] = is_scoped |> JsBoolean
+
         raw_enum["kind"] = "enum" |> JsString
 
         if @scanner.next_is(Token.LeftBracket):
@@ -1213,6 +1219,8 @@ class CSourceDriver(engine: EngineCore) {
             cmd_var()
         elif command == "builtin":
             cmd_builtin()
+        elif command == "scoped":
+            cmd_enum(true)
         elif command == "library":
             cmd_library()
         elif command == "PackageFiles":

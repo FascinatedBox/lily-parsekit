@@ -378,7 +378,7 @@ define on_dyna_containers(class_obj: Hash[String, parsekit.JsObject])
         total_size = field_to_list(class_obj, "functions").size()
 
         if class_obj.has_key("is_scoped"):
-            total_size += field_to_list(class_obj, "enums").size()
+            total_size += field_to_list(class_obj, "variants").size()
     }
 
     var suffix = "\\0"
