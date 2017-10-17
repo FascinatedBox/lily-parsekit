@@ -173,8 +173,10 @@ define clean_proto(input: Hash[String, parsekit.JsObject])
     if out_text != "":
         out_text = "(" ++ out_text ++ ")"
 
+    # The space is vital: Without it, the return type will be confused for a
+    # keyword argument.
     if return_type != "Unit":
-        out_text = out_text ++ ":" ++ return_type
+        out_text = out_text ++ ": " ++ return_type
 
     return out_text
 }
