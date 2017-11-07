@@ -273,6 +273,9 @@ define render_args(
         var name = arg["name"].as_string()
         var type_string = render_linked_type(state, arg["type"].as_hash())
 
+        if arg.has_key("keyarg"):
+            name = arg["keyarg"].as_string() ++ " " ++ name
+
         out.push(name ++ ": " ++ type_string)
     }
 
@@ -353,6 +356,9 @@ define write_variants(
                             render_plain_type(h)
                         )
                         .join(", ")
+
+        if variant.has_key("keyarg"):
+            name = variant["keyarg"].as_string() ++ " " ++ name
 
         if arg_str:
             arg_str = "(" ++ arg_str ++ ")"

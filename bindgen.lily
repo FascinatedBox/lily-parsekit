@@ -162,8 +162,14 @@ define clean_proto(input: Hash[String, parsekit.JsObject])
     var start = 0
 
     for i in 0...args.size() - 1: {
-        var c = args[i].as_hash()["type"].as_hash()
-        out.push(display_noopt_type(c))
+        var arg_hash = args[i].as_hash()
+        var type_hash = arg_hash["type"].as_hash()
+        var out_str = display_noopt_type(type_hash)
+
+        if arg_hash.has_key("keyarg"):
+            out_str = arg_hash["keyarg"].as_string() ++ " " ++ out_str
+
+        out.push(out_str)
     }
 
     var out_text = out.join(",")
@@ -339,12 +345,22 @@ define on_dyna_variants(
 {
     var dyna_letter = "V"
     var type_str = ""
+    var out: List[String] = []
+    var args = field_to_list(obj, "args")
 
-    var types = field_to_list(obj, "args")
-                    .map(|m| m.as_hash()["type"].as_hash() |> display_type)
+    for i in 0...args.size() - 1: {
+        var arg_hash = args[i].as_hash()
+        var type_hash = arg_hash["type"].as_hash()
+        var out_str = display_noopt_type(type_hash)
 
-    if types.size():
-        type_str = "(" ++ types.join(",") ++ ")"
+        if arg_hash.has_key("keyarg"):
+            out_str = arg_hash["keyarg"].as_string() ++ " " ++ out_str
+
+        out.push(out_str)
+    }
+
+    if out.size():
+        type_str = "(" ++ out.join(",") ++ ")"
 
     gen_output.push(
     "    ,\"" ++ dyna_letter

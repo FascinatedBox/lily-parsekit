@@ -27,6 +27,7 @@ scoped enum Token {
     DoubleQuote,
     EndOfFile,
     Equal,
+    Keyarg,
     LeftBracket,
     LeftCurly,
     LeftParenth,
@@ -185,6 +186,24 @@ class EngineScanner
                     @source_pos += 1
                 case Token.Colon:
                     @source_pos += 1
+
+                    ch = @source_bytes[@source_pos]
+                    var cc = char_class[ch.to_i()]
+
+                    if cc == Token.Word || cc == Token.Digit: {
+                        calltrace().each(print)
+
+                        var start = @source_pos - 1
+
+                        while cc == Token.Word || cc == Token.Digit: {
+                            @source_pos += 1
+                            ch = @source_bytes[@source_pos]
+                            cc = char_class[ch.to_i()]
+                        }
+
+                        result_str = @source.slice(start, @source_pos)
+                        result_tok = Token.Keyarg
+                    }
                 case Token.Less:
                     @source_pos += 1
                 case Token.Semicolon:
@@ -735,6 +754,13 @@ class EngineCore {
                 @scanner.next()
             else:
                 while 1: {
+                    var keyarg_name = ""
+
+                    if @scanner.current_is(Token.Keyarg): {
+                        keyarg_name = @scanner.current_str()
+                        @scanner.next()
+                    }
+
                     @scanner.expect(Token.Word)
                     var arg_name = @scanner.current_str()
 
@@ -747,6 +773,11 @@ class EngineCore {
                         ["name" => JsString(arg_name),
                          "type" => arg_type
                         ] |> JsHash
+
+                    if keyarg_name: {
+                        var h = arg.as_hash()
+                        h["keyarg"] = keyarg_name |> JsString
+                    }
 
                     define_args.push(arg)
 
@@ -804,12 +835,24 @@ class EngineCore {
         @scanner.next()
 
         while 1: {
+            var keyarg_name = ""
+
+            if @scanner.current_is(Token.Keyarg): {
+                keyarg_name = @scanner.current_str()
+                @scanner.next()
+            }
+
             @scanner.expect(Token.Word)
 
             var arg_hash = [
                 "name" => "" |> JsString,
                 "type" => scan_type()
             ] |> JsHash
+
+            if keyarg_name: {
+                var h = arg_hash.as_hash()
+                h["keyarg"] = keyarg_name |> JsString
+            }
 
             variant_args.push(arg_hash)
 

@@ -71,6 +71,7 @@ Global vars will never have a qualifier set, as they're always global.
     "args": [
         {
             "name": "<argument name>",
+            "keyarg": ":<keyword name>" | absent,
             "type": type directive
         } ...
     ]
@@ -158,6 +159,7 @@ There are three general kinds of classes that are represented here:
     "args": [
         {
             "name": ""
+            "keyarg": ":<keyword name>" | absent
             "type": type directive
         }...
     ] | absent
