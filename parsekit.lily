@@ -638,7 +638,7 @@ class EngineCore {
 
             if i != raw_class.generics && raw_class.name != "Tuple": {
                 raise ParseError("Wrong number of types for {0} ({1} for {2})."
-                        .format(raw_class.name, raw_class.generics, i))
+                        .format(raw_class.name, i, raw_class.generics))
             }
         else:
             @scanner.require(Token.LeftParenth)
