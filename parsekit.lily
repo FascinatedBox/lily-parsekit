@@ -636,7 +636,7 @@ class EngineCore {
                 }
             }
 
-            if i != raw_class.generics && raw_class.name != "Tuple": {
+            if i != raw_class.generics && raw_class.generics != -1: {
                 raise ParseError("Wrong number of types for {0} ({1} for {2})."
                         .format(raw_class.name, i, raw_class.generics))
             }
