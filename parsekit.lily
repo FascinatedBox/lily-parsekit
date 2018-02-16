@@ -501,7 +501,6 @@ class EngineCore {
         ClassSym("ValueError", 0),
         ClassSym("IndexError", 0),
         ClassSym("DivisionByZeroError", 0),
-        ClassSym("AssertionError", 0),
         ClassSym("$1", 0),
         ClassSym("$2", 0)
     ]
