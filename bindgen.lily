@@ -38,10 +38,11 @@ define string_size(source: String): Integer {
 define field_to_list(source: Hash[String, parsekit.JsObject], field: String)
     : List[parsekit.JsObject]
 {
-    try:
+    try: {
         return source[field].as_list()
     except KeyError:
         return []
+    }
 
     return []
 }
@@ -49,10 +50,11 @@ define field_to_list(source: Hash[String, parsekit.JsObject], field: String)
 define field_to_string(source: Hash[String, parsekit.JsObject], field: String)
     : String
 {
-    try:
+    try: {
         return source[field].as_string()
     except KeyError:
         return ""
+    }
 
     return ""
 }
@@ -77,8 +79,9 @@ define run_each(
 {
     var entries = field_to_list(source, field)
 
-    for i in 0...entries.size() - 1:
+    for i in 0...entries.size() - 1: {
         entries[i].as_hash() |> fn
+    }
 }
 
 define run_each_child(
@@ -88,8 +91,9 @@ define run_each_child(
 {
     var entries = field_to_list(source, field)
 
-    for i in 0...entries.size() - 1:
+    for i in 0...entries.size() - 1: {
         fn(source, entries[i].as_hash())
+    }
 }
 
 define display_type(source: Hash[String, parsekit.JsObject])
@@ -103,10 +107,11 @@ define display_type(source: Hash[String, parsekit.JsObject])
         var func_out = args[0]
         var inputs = args.slice(1, args.size()).join(", ")
 
-        if func_out != "Unit":
+        if func_out != "Unit": {
             func_out = " => " ++ func_out 
         else:
             func_out = ""
+        }
 
         out = out ++ "(" ++ inputs ++ func_out ++ ")"
     elif source.has_key("is_optarg"):
@@ -115,8 +120,9 @@ define display_type(source: Hash[String, parsekit.JsObject])
         out = out ++ "[" ++ args.join(", ") ++ "]"
     }
 
-    if source.has_key("is_vararg"):
+    if source.has_key("is_vararg"): {
         out = out ++ "..."
+    }
 
     return out
 }
@@ -136,10 +142,11 @@ define display_noopt_type(source: Hash[String, parsekit.JsObject])
         var func_out = args[0]
         var inputs = args.slice(1, args.size()).join(", ")
 
-        if func_out != "Unit":
+        if func_out != "Unit": {
             func_out = "=>" ++ func_out
         else:
             func_out = ""
+        }
 
         out = out ++ "(" ++ inputs ++ func_out ++ ")"
     elif source.has_key("is_optarg"):
@@ -148,8 +155,9 @@ define display_noopt_type(source: Hash[String, parsekit.JsObject])
         out = out ++ "[" ++ args.join(",") ++ "]"
     }
 
-    if source.has_key("is_vararg"):
+    if source.has_key("is_vararg"): {
         out = out ++ "..."
+    }
 
     return out
 }
@@ -166,8 +174,9 @@ define clean_proto(input: Hash[String, parsekit.JsObject])
         var type_hash = arg_hash["type"].as_hash()
         var out_str = display_noopt_type(type_hash)
 
-        if arg_hash.has_key("keyarg"):
+        if arg_hash.has_key("keyarg"): {
             out_str = arg_hash["keyarg"].as_string() ++ " " ++ out_str
+        }
 
         out.push(out_str)
     }
@@ -176,13 +185,15 @@ define clean_proto(input: Hash[String, parsekit.JsObject])
     var return_type = display_noopt_type(
         input["output"].as_hash())
 
-    if out_text != "":
+    if out_text != "": {
         out_text = "(" ++ out_text ++ ")"
+    }
 
     # The space is vital: Without it, the return type will be confused for a
     # keyword argument.
-    if return_type != "Unit":
+    if return_type != "Unit": {
         out_text = out_text ++ ": " ++ return_type
+    }
 
     return out_text
 }
@@ -230,8 +241,9 @@ define on_setup_containers(source: Hash[String, parsekit.JsObject])
 {
     var kind = source["kind"].as_string()
 
-    if kind == "enum":
+    if kind == "enum": {
         return
+    }
 
     var cls_name = source["name"].as_string()
     var full_name = "lily_{0}_{1}".format(gen_pkg_name, cls_name)
@@ -275,8 +287,9 @@ define on_setup_containers(source: Hash[String, parsekit.JsObject])
 
 define start_setup(root_obj: Hash[String, parsekit.JsObject])
 {
-    if root_obj["name"].as_string() != "builtin":
+    if root_obj["name"].as_string() != "builtin": {
         run_each(root_obj, "containers", on_setup_containers)
+    }
 }
 
 #[
@@ -300,12 +313,13 @@ define on_dyna_vars(
     if obj.has_key("qualifier"): {
         var qual = obj["qualifier"].as_string()
 
-        if qual == "public":
+        if qual == "public": {
             dyna_letter = "3"
         elif qual == "protected":
             dyna_letter = "2"
         elif qual == "private":
             dyna_letter = "1"
+        }
     }
 
     gen_output.push(
@@ -322,14 +336,16 @@ define on_dyna_functions(
     var dyna_letter = "F"
     var generic_list = field_to_list(obj, "generics")
 
-    if parent["kind"].as_string() != "module":
+    if parent["kind"].as_string() != "module": {
         dyna_letter = "m"
+    }
 
     var generics = generic_list.map(|m| m.as_string()).join(",")
     var proto = clean_proto(obj)
 
-    if generics:
+    if generics: {
         generics = "[" ++ generics ++ "]"
+    }
 
     gen_output.push(
     "    ,\"" ++ dyna_letter ++ "\\0"
@@ -353,14 +369,16 @@ define on_dyna_variants(
         var type_hash = arg_hash["type"].as_hash()
         var out_str = display_noopt_type(type_hash)
 
-        if arg_hash.has_key("keyarg"):
+        if arg_hash.has_key("keyarg"): {
             out_str = arg_hash["keyarg"].as_string() ++ " " ++ out_str
+        }
 
         out.push(out_str)
     }
 
-    if out.size():
+    if out.size(): {
         type_str = "(" ++ out.join(",") ++ ")"
+    }
 
     gen_output.push(
     "    ,\"" ++ dyna_letter
@@ -382,10 +400,11 @@ define on_dyna_containers(class_obj: Hash[String, parsekit.JsObject])
     dyna_class_names.push(name)
 
     if is_not_enum: {
-        if class_obj["kind"].as_string() == "foreign":
+        if class_obj["kind"].as_string() == "foreign": {
             dyna_letter = "C\\"
         else:
             dyna_letter = "N\\"
+        }
 
         parent = field_to_string(class_obj, "parent")
         total_size =
@@ -395,8 +414,9 @@ define on_dyna_containers(class_obj: Hash[String, parsekit.JsObject])
         dyna_letter = "E\\"
         total_size = field_to_list(class_obj, "functions").size()
 
-        if class_obj.has_key("is_scoped"):
+        if class_obj.has_key("is_scoped"): {
             total_size += field_to_list(class_obj, "variants").size()
+        }
     }
 
     var suffix = "\\0"
@@ -404,21 +424,24 @@ define on_dyna_containers(class_obj: Hash[String, parsekit.JsObject])
                     .map(|m| m.as_string() )
                     .join(",")
 
-    if generics:
+    if generics: {
         suffix = suffix ++ "[" ++ generics ++ "]"
+    }
 
-    if parent:
+    if parent: {
         suffix = suffix ++ "< " ++ parent
+    }
 
     gen_output.push(
     ["    ,\"", dyna_letter, oct(total_size), name, suffix, "\""].join())
 
     run_each_child(class_obj, "functions", on_dyna_functions)
 
-    if is_not_enum:
+    if is_not_enum: {
         run_each_child(class_obj, "properties", on_dyna_vars)
     else:
         run_each_child(class_obj, "variants", on_dyna_variants)
+    }
 }
 
 define start_dyna(root_obj: Hash[String, parsekit.JsObject])
@@ -434,8 +457,9 @@ define start_dyna(root_obj: Hash[String, parsekit.JsObject])
     gen_output.push("    ,\"Z\"")
     gen_output.push("};")
 
-    if gen_pkg_name == "builtin":
+    if gen_pkg_name == "builtin": {
         dyna_class_names = []
+    }
 
     var dyna_names = dyna_class_names.join("\\0")
     var dyna_size = dyna_class_names.size() |> oct
@@ -472,11 +496,13 @@ define on_proto_functions(
     var name = obj["name"].as_string()
     var class_name = ""
 
-    if parent["kind"].as_string() != "module":
+    if parent["kind"].as_string() != "module": {
         class_name = parent["name"].as_string()
+    }
 
-    if obj.has_key("is_ctor"):
+    if obj.has_key("is_ctor"): {
         name = "new"
+    }
 
     gen_output.push("void lily_{0}_{1}_{2}(lily_state *);"
         .format(gen_pkg_name, class_name, name))
@@ -579,8 +605,9 @@ define on_loader_functions(
         class_name = parent_name
     }
 
-    if obj.has_key("is_ctor"):
+    if obj.has_key("is_ctor"): {
         name = "new"
+    }
 
     var distance = (loader_index - offset_pairs[parent_name])
     var case_str = parent_name ++ "_OFFSET + " ++ distance
@@ -653,7 +680,7 @@ define verify_autogen_range(range: Tuple[Integer, Integer])
 {
     var ok = false
 
-    if range[0] == -1:
+    if range[0] == -1: {
         print("bindgen: Error: No '/** Begin autogen section. **/' marker found.")
     elif range[1] == -1:
         print("bindgen: Error: No '/** End autogen section. **/' marker found.")
@@ -661,6 +688,7 @@ define verify_autogen_range(range: Tuple[Integer, Integer])
         print("bindgen: Error: autogen end after start.")
     else:
         ok = true
+    }
 
     return ok
 }
@@ -670,8 +698,9 @@ define run_bindgen(
     path: String,
     autogen_range: Tuple[Integer, Integer])
 {
-    if verify_autogen_range(autogen_range) == false:
+    if verify_autogen_range(autogen_range) == false: {
         return
+    }
 
     var driver = parsekit.CSourceDriver(parsekit.EngineCore())
 
@@ -691,8 +720,9 @@ define run_bindgen(
 
             gen_pkg_name = root_hash["name"].as_string()
 
-            for i in 0...starts.size() - 1:
+            for i in 0...starts.size() - 1: {
                 starts[i](root_hash)
+            }
 
             var f = File.open(path, "w")
             var header = source_lines.slice(0, autogen_range[0] + 1)
