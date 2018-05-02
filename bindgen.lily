@@ -446,7 +446,7 @@ define on_dyna_containers(class_obj: Hash[String, parsekit.JsObject])
 
 define start_dyna(root_obj: Hash[String, parsekit.JsObject])
 {
-    gen_output.push("const char *lily_" ++ gen_pkg_name ++ "_table[] = {")
+    gen_output.push("const char *lily_" ++ gen_pkg_name ++ "_info_table[] = {")
     gen_output.push("")
     var patch_index = gen_output.size()
 
@@ -568,31 +568,26 @@ define start_offsets(root_obj: Hash[String, parsekit.JsObject])
 }
 
 #[
-Loader stage
-    The loader is responsible for delivering raw pointers back to the
-    interpreter based on an index from the dyna table. For definitions, the
-    pointer is returned, whereas vars call a function to push a value and
-    return NULL.
+Call Table stage
+    The call table holds pointers that the interpreter uses to carry out the
+    action for an index given. For method indexes, it'll send back a method.
+    For vars, it'll send back the var loader. Both kinds of functions have the
+    same signature, so they're stored in the same table.
+    This table is NULL-padded to account for the string table holding entries
+    that don't need a companion (like enum and variant declarations).
 ]#
 
-var loader_index = 1
-
-define on_loader_vars(
+define on_call_table_vars(
     parent: Hash[String, parsekit.JsObject],
     obj: Hash[String, parsekit.JsObject])
 {
     var name = obj["name"].as_string()
-    var distance = loader_index - offset_pairs["toplevel"]
-    var load_name = "lily_{0}_var_{1}".format(gen_pkg_name, name)
-    var case_str = "toplevel_OFFSET + " ++ distance
+    var load_name = "    lily_{0}_var_{1},".format(gen_pkg_name, name)
 
-    gen_output.push(
-        "        case " ++ case_str ++ ": " ++ load_name
-                        ++ "(s); return NULL;")
-    loader_index += 1
+    gen_output.push(load_name)
 }
 
-define on_loader_functions(
+define on_call_table_functions(
     parent: Hash[String, parsekit.JsObject],
     obj: Hash[String, parsekit.JsObject])
 {
@@ -609,38 +604,36 @@ define on_loader_functions(
         name = "new"
     }
 
-    var distance = (loader_index - offset_pairs[parent_name])
-    var case_str = parent_name ++ "_OFFSET + " ++ distance
-    var load_name = "lily_{0}_{1}_{2}"
-        .format(gen_pkg_name, class_name, name)
+    var load_name = "    lily_{0}_{1}_{2},"
+            .format(gen_pkg_name, class_name, name)
 
-    gen_output.push(
-        "        case " ++ case_str ++ ": return " ++ load_name ++ ";")
-    loader_index += 1
+    gen_output.push(load_name)
 }
 
-define start_loader(root_obj: Hash[String, parsekit.JsObject])
+define start_call_table(root_obj: Hash[String, parsekit.JsObject])
 {
     gen_output.push(
-        "void *lily_" ++ gen_pkg_name ++ "_loader(lily_state *s, int id)\n{")
-    gen_output.push(
-        "    switch (id) {")
+        "void (*lily_" ++ gen_pkg_name ++ "_call_table[])(lily_state *s) = {")
+
+    # This accounts for the info table having a header line.
+    gen_output.push("    NULL,")
 
     run_each(root_obj, "containers", (|obj|
-        loader_index += 1
-        run_each_child(obj, "functions", on_loader_functions )
-        loader_index +=
-            field_to_list(obj, "variants").size() +
-            field_to_list(obj, "properties").size()
-        )
-    )
+        gen_output.push("    NULL,")
 
-    run_each_child(root_obj, "functions", on_loader_functions)
-    run_each_child(root_obj, "vars", on_loader_vars)
+        run_each_child(obj, "functions", on_call_table_functions )
 
-    gen_output.push("        default: return NULL;")
-    gen_output.push("    }")
-    gen_output.push("}")
+        field_to_list(obj, "variants")
+            .each(|e| gen_output.push("    NULL,") )
+
+        field_to_list(obj, "properties")
+            .each(|e| gen_output.push("    NULL,") )
+    ) )
+
+    run_each_child(root_obj, "functions", on_call_table_functions)
+    run_each_child(root_obj, "vars", on_call_table_vars)
+
+    gen_output.push("};")
 }
 
 define load_source_lines(name: String): List[String]
@@ -714,7 +707,7 @@ define run_bindgen(
                 start_dyna,
                 start_offsets,
                 start_proto,
-                start_loader]
+                start_call_table]
 
             var root_hash = root_obj.as_hash()
 
