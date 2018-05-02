@@ -1,0 +1,6 @@
+{
+    "version": "v0.1.0",
+    "summary": "Parse Lily in Lily. Contains bindgen and docgen.",
+    "source": "https://github.com/FascinatedBox/lily-parsekit",
+    "license": "MIT"
+}
